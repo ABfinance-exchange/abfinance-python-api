@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from typing import Union
 from abfinance_api.exceptions import (
     InvalidChannelTypeError,
     TopicMismatchError,
@@ -114,7 +115,7 @@ class WebSocket(_V5WebSocketManager):
 
     # Public topics
 
-    def orderbook_stream(self, depth: int, symbol: (str, list), callback):
+    def orderbook_stream(self, depth: int, symbol: Union[str, list], callback):
         """Subscribe to the orderbook stream. Supports different depths.
 
         Spot:
@@ -130,7 +131,7 @@ class WebSocket(_V5WebSocketManager):
         topic = f"orderbook.{depth}." + "{symbol}"
         self.subscribe(topic, callback, symbol)
 
-    def rpi_orderbook_stream(self, symbol: (str, list), callback):
+    def rpi_orderbook_stream(self, symbol: Union[str, list], callback):
         """Subscribe to the RPI orderbook stream.
 
         Spot:
@@ -144,7 +145,7 @@ class WebSocket(_V5WebSocketManager):
         topic = f"orderbook.rpi." + "{symbol}"
         self.subscribe(topic, callback, symbol)
 
-    def trade_stream(self, symbol: (str, list), callback):
+    def trade_stream(self, symbol: Union[str, list], callback):
         """Subscribe to the recent trades stream.
         After subscription, you will be pushed trade messages in real-time.
 
@@ -158,7 +159,7 @@ class WebSocket(_V5WebSocketManager):
         topic = f"publicTrade." + "{symbol}"
         self.subscribe(topic, callback, symbol)
 
-    def ticker_stream(self, symbol: (str, list), callback):
+    def ticker_stream(self, symbol: Union[str, list], callback):
         """Subscribe to the ticker stream.
 
         Push frequency: 100ms
@@ -171,7 +172,7 @@ class WebSocket(_V5WebSocketManager):
         topic = "tickers.{symbol}"
         self.subscribe(topic, callback, symbol)
 
-    def kline_stream(self, interval: int, symbol: (str, list), callback):
+    def kline_stream(self, interval: int, symbol: Union[str, list], callback):
         """Subscribe to the klines stream.
 
         Push frequency: 1-60s

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from dataclasses import dataclass, field
 import time
 import hmac
@@ -15,6 +14,7 @@ from datetime import datetime as dt, timezone
 
 from .exceptions import FailedRequestError, InvalidRequestError
 from . import _helpers
+from typing import Optional
 
 # Requests will use simplejson if available.
 try:
@@ -31,6 +31,14 @@ TLD_NL = "nl"           # The Netherlands
 TLD_HK = "com.hk"       # Hong Kong
 TLD_KZ = "kz"           # Kazakhstan
 TLD_EU = "eu"           # European Economic Area. ONLY AVAILABLE TO INSTITUTIONS
+
+
+class _RetryableAPIError(Exception):
+    """Internal exception to signal a retryable API error within the retry loop."""
+
+    def __init__(self, message, recv_window):
+        super().__init__(message)
+        self.recv_window = recv_window
 
 
 def generate_signature(use_rsa_authentication, secret, param_str):
@@ -62,19 +70,19 @@ class _V5HTTPManager:
     testnet: bool = field(default=False)
     domain: str = field(default=DOMAIN_MAIN)
     tld: str = field(default=TLD_MAIN)
-    rsa_authentication: str = field(default=False)
-    api_key: str = field(default=None)
-    api_secret: str = field(default=None)
-    logging_level: logging = field(default=logging.INFO)
+    rsa_authentication: bool = field(default=False)
+    api_key: Optional[str] = field(default=None)
+    api_secret: Optional[str] = field(default=None)
+    logging_level: int = field(default=logging.INFO)
     log_requests: bool = field(default=False)
     timeout: int = field(default=10)
-    recv_window: bool = field(default=5000)
+    recv_window: int = field(default=5000)
     force_retry: bool = field(default=False)
-    retry_codes: defaultdict[dict] = field(default_factory=dict)
+    retry_codes: set = field(default_factory=set)
     ignore_codes: set = field(default_factory=set)
-    max_retries: bool = field(default=3)
-    retry_delay: bool = field(default=3)
-    referral_id: str = field(default=None)
+    max_retries: int = field(default=3)
+    retry_delay: int = field(default=3)
+    referral_id: Optional[str] = field(default=None)
     record_request_time: bool = field(default=False)
     return_response_headers: bool = field(default=False)
 
@@ -164,6 +172,7 @@ class _V5HTTPManager:
         query = self._clean_query(query)
         recv_window = self.recv_window
         retries_attempted = self.max_retries
+        req_params = None
 
         while retries_attempted > 0:
             retries_attempted -= 1
@@ -179,6 +188,8 @@ class _V5HTTPManager:
 
                 return self._handle_response(response, method, path, req_params, recv_window, retries_attempted)
 
+            except _RetryableAPIError as e:
+                recv_window = e.recv_window
             except (requests.exceptions.ReadTimeout, requests.exceptions.SSLError,
                     requests.exceptions.ConnectionError) as e:
                 self._handle_network_error(e, retries_attempted)
@@ -258,8 +269,13 @@ class _V5HTTPManager:
             error_msg = f"{s_json[ret_msg]} (ErrCode: {error_code})"
 
             if error_code in self.retry_codes:
-                self._handle_retryable_error(response, error_code, error_msg, recv_window)
-                raise Exception("Retryable error occurred, retrying...")
+                updated_recv_window = self._handle_retryable_error(
+                    response, error_code, error_msg, recv_window
+                )
+                raise _RetryableAPIError(
+                    "Retryable error occurred, retrying...",
+                    recv_window=updated_recv_window,
+                )
 
             if error_code not in self.ignore_codes:
                 raise InvalidRequestError(
@@ -281,7 +297,7 @@ class _V5HTTPManager:
             return s_json
 
     def _handle_retryable_error(self, response, error_code, error_msg, recv_window):
-        """Handle specific retryable errors."""
+        """Handle specific retryable errors. Returns updated recv_window."""
         delay_time = self.retry_delay
 
         if error_code == 10002:  # recv_window error
@@ -296,6 +312,7 @@ class _V5HTTPManager:
 
         self.logger.error(f"{error_msg}. Retrying...")
         time.sleep(delay_time)
+        return recv_window
 
     def _handle_network_error(self, error, retries_attempted):
         """Handle network-related exceptions."""

@@ -168,6 +168,7 @@ class _WebSocketManager:
             while self.wst.is_alive():
                 if self.ws.sock and self.is_connected():
                     break
+                time.sleep(0.01)
 
             # If connection was not successful, raise error.
             if not infinitely_reconnect and retries <= 0:
@@ -256,15 +257,16 @@ class _WebSocketManager:
         self.ws.send(self.custom_ping_message)
 
     def _send_initial_ping(self):
-        timer = threading.Timer(
+        self._initial_ping_timer = threading.Timer(
             self.ping_interval, self._send_custom_ping
         )
-        timer.start()
+        self._initial_ping_timer.start()
 
     @staticmethod
     def _is_custom_pong(message):
         if message.get("ret_msg") == "pong" or message.get("op") == "pong":
             return True
+        return False
 
     def _reset(self):
         """
@@ -278,10 +280,14 @@ class _WebSocketManager:
         """
         Closes the websocket connection.
         """
+        if hasattr(self, "_initial_ping_timer"):
+            self._initial_ping_timer.cancel()
 
         self.ws.close()
-        while self.ws.sock:
-            continue
+        timeout = 5
+        start = time.time()
+        while self.ws.sock and (time.time() - start) < timeout:
+            time.sleep(0.01)
         self.exited = True
 
 
@@ -306,7 +312,7 @@ class _V5WebSocketManager(_WebSocketManager):
             self,
             topic: str,
             callback,
-            symbol: (str, list) = False
+            symbol=None,
     ):
 
         def prepare_subscription_args(list_of_symbols):
