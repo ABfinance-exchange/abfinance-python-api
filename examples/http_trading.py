@@ -13,8 +13,8 @@ from abfinance_api.unified_trading import HTTP
 
 session = HTTP(
     testnet=True,
-    api_key="DmYz0aRKBG9fOFrF4d",
-    api_secret="WLVU3Jz1n1L0KHoMzJ1kR5hnegm2ZESRs2dL",
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
 )
 
 # =============================================================================
